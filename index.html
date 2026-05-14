@@ -215,6 +215,7 @@
                 <span class="coord-label">Dist. al restaurante</span>
                 <span class="coord-value" id="distancia" style="font-size:1.1rem;font-weight:700">--</span>
             </div>
+            <button id="btnVerMapa" class="btn" style="margin-top:1.5rem; padding: 0.8rem; font-size: 0.9rem; background: #2a2a44;">🗺️ Ver en Google Maps</button>
         </div>
 
         <p class="error" id="error"></p>
@@ -281,6 +282,12 @@
             longitudEl.textContent = lng.toFixed(6);
             precisionEl.textContent = precision;
             direccionEl.textContent = direccion || 'No disponible';
+
+            // Configurar botón de mapa
+            const btnMapa = document.getElementById('btnVerMapa');
+            btnMapa.onclick = () => {
+                window.open(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`, '_blank');
+            };
             if (distM !== null && distM !== undefined) {
                 if (distM < 1000) {
                     distanciaEl.textContent = Math.round(distM) + ' m';
@@ -302,7 +309,19 @@
                     { headers: { 'Accept-Language': 'es' } }
                 );
                 const data = await res.json();
-                return (data && data.display_name) || null;
+                if (!data || !data.address) return data.display_name || null;
+
+                const a = data.address;
+                const calle = a.road || a.pedestrian || a.street || '';
+                const numero = a.house_number || '';
+                const ciudad = a.city || a.town || a.village || '';
+
+                if (calle && numero) {
+                    return `${calle} ${numero}, ${ciudad}`;
+                } else if (calle) {
+                    return `${calle}, ${ciudad}`;
+                }
+                return data.display_name || null;
             } catch { return null; }
         }
 
@@ -340,7 +359,7 @@
             btn.disabled = false; completeProgress();
             const dist = calcDist(coords.lat, coords.lng, RESTAURANT.lat, RESTAURANT.lng);
             status.textContent = '✅ Ubicación aproximada por IP';
-            showResult(coords.lat, coords.lng, '~' + coords.lat.toFixed(1) + ' (IP)', direccion, dist);
+            showResult(coords.lat, coords.lng, 'Aproximada (IP)', direccion, dist);
             return true;
         }
 
@@ -387,19 +406,17 @@
                     let lng = pos.coords.longitude;
                     let acc = Math.round(pos.coords.accuracy);
 
-                    if (acc > 30) {
-                        status.textContent = `📡 Baja precisión (${acc}m), probando GPS...`;
+                    if (acc > 50) { // Relajamos un poco el umbral a 50m para evitar saltar a IP tan rápido
+                        status.textContent = `📡 Precisión media (${acc}m), intentando mejorar...`;
                         try {
-                            const pos2 = await intentarLocalizacion(true, 10000);
+                            const pos2 = await intentarLocalizacion(true, 12000);
                             if (gpsTimedOut) return;
-                            const lat2 = pos2.coords.latitude;
-                            const lng2 = pos2.coords.longitude;
-                            const acc2 = Math.round(pos2.coords.accuracy);
-                            if (acc2 <= acc) {
-                                lat = lat2; lng = lng2; acc = acc2;
-                            }
+                            lat = pos2.coords.latitude;
+                            lng = pos2.coords.longitude;
+                            acc = Math.round(pos2.coords.accuracy);
                         } catch {}
-                        if (acc > 30) {
+                        
+                        if (acc > 200) { // Solo usamos IP si el error es de más de 2 cuadras
                             status.textContent = `📡 Precisión insuficiente (${acc}m), usando IP...`;
                             if (!(await obtenerPorIP())) {
                                 btn.disabled = false; completeProgress();
