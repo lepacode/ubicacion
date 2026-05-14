@@ -229,11 +229,10 @@
         const errorEl = document.getElementById('error');
 
         let progressInterval = null;
-        let progress = 0;
+        let gpsTimedOut = false;
 
         function resetUI() {
             clearInterval(progressInterval);
-            progress = 0;
             progressBar.style.width = '0%';
             progressContainer.classList.remove('active');
             result.classList.remove('show');
@@ -242,23 +241,18 @@
 
         function simulateProgress() {
             progressContainer.classList.add('active');
-            progress = 0;
             progressBar.style.width = '0%';
-
+            let p = 0;
             clearInterval(progressInterval);
             progressInterval = setInterval(() => {
-                progress += Math.random() * 6 + 2;
-                if (progress >= 95) {
-                    progress = 95;
-                    clearInterval(progressInterval);
-                }
-                progressBar.style.width = Math.min(progress, 95) + '%';
+                p += Math.random() * 6 + 2;
+                if (p >= 95) { p = 95; clearInterval(progressInterval); }
+                progressBar.style.width = Math.min(p, 95) + '%';
             }, 200);
         }
 
         function completeProgress() {
             clearInterval(progressInterval);
-            progress = 100;
             progressBar.style.width = '100%';
             setTimeout(() => {
                 progressContainer.classList.remove('active');
@@ -269,7 +263,7 @@
         function showResult(lat, lng, precision, direccion) {
             latitudEl.textContent = lat.toFixed(6);
             longitudEl.textContent = lng.toFixed(6);
-            precisionEl.textContent = precision + ' metros';
+            precisionEl.textContent = precision;
             direccionEl.textContent = direccion || 'No disponible';
             result.classList.add('show');
         }
@@ -281,103 +275,134 @@
                     { headers: { 'Accept-Language': 'es' } }
                 );
                 const data = await res.json();
-                if (data && data.display_name) {
-                    return data.display_name;
-                }
-                return null;
-            } catch {
-                return null;
-            }
+                return (data && data.display_name) || null;
+            } catch { return null; }
         }
 
-        function showError(msg) {
-            errorEl.textContent = msg;
+        async function fetchIP() {
+            const apis = [
+                async () => {
+                    const r = await fetch('https://ipinfo.io/json', { signal: AbortSignal.timeout(5000) });
+                    const d = await r.json();
+                    const [lat, lng] = (d.loc || '').split(',').map(Number);
+                    if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
+                    return null;
+                },
+                async () => {
+                    const r = await fetch('https://geolocation-db.com/json/', { signal: AbortSignal.timeout(5000) });
+                    const d = await r.json();
+                    const lat = parseFloat(d.latitude);
+                    const lng = parseFloat(d.longitude);
+                    if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
+                    return null;
+                }
+            ];
+            for (const api of apis) {
+                try { const r = await api(); if (r) return r; } catch {}
+            }
+            return null;
         }
 
         async function obtenerPorIP() {
-            status.textContent = '📍 Obteniendo ubicación por IP...';
-            try {
-                const res = await fetch('https://ip-api.com/json/?fields=lat,lon,city,region,country,query');
-                const data = await res.json();
-                if (data && data.lat && data.lon) {
-                    const lat = data.lat;
-                    const lng = data.lon;
-                    status.textContent = '🔍 Obteniendo dirección...';
-                    const direccion = await reverseGeocode(lat, lng);
-                    btn.disabled = false;
-                    completeProgress();
-                    status.textContent = '✅ Ubicación aproximada por IP';
-                    showResult(lat, lng, '~' + Math.round(distanciaKm(lat, lng, lat, lng) * 1000) || 'desconocida', direccion);
-                    return true;
-                }
-                return false;
-            } catch {
-                return false;
-            }
-        }
+            status.textContent = '📍 Buscando ubicación por IP...';
+            const coords = await fetchIP();
+            if (!coords) return false;
 
-        function distanciaKm(lat1, lon1, lat2, lon2) {
-            const R = 6371;
-            const dLat = (lat2 - lat1) * Math.PI / 180;
-            const dLon = (lon2 - lon1) * Math.PI / 180;
-            const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
-            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            status.textContent = '🔍 Obteniendo dirección...';
+            const direccion = await reverseGeocode(coords.lat, coords.lng);
+            btn.disabled = false;
+            completeProgress();
+            status.textContent = '✅ Ubicación aproximada por IP';
+            showResult(coords.lat, coords.lng, '~' + coords.lat.toFixed(1) + ' (IP)', direccion);
+            return true;
         }
 
         async function iniciar() {
             resetUI();
-            if (!navigator.geolocation) {
-                status.textContent = '📡 GPS no disponible, usando IP...';
-                await obtenerPorIP();
-                return;
-            }
+            gpsTimedOut = false;
 
-            status.textContent = 'Obteniendo ubicación GPS...';
+            status.textContent = 'Obteniendo ubicación...';
             btn.disabled = true;
             simulateProgress();
 
-            navigator.geolocation.getCurrentPosition(
-                async (position) => {
-                    const lat = position.coords.latitude;
-                    const lng = position.coords.longitude;
-                    const acc = Math.round(position.coords.accuracy);
+            const seguroGPS = setTimeout(() => {
+                gpsTimedOut = true;
+            }, 12000);
+
+            if (!navigator.geolocation) {
+                clearTimeout(seguroGPS);
+                status.textContent = '📡 GPS no soportado, usando IP...';
+                if (!(await obtenerPorIP())) {
+                    btn.disabled = false; completeProgress();
+                    status.textContent = '❌ Sin ubicación disponible';
+                    errorEl.textContent = 'No se pudo obtener ubicación por ningún método.';
+                }
+                return;
+            }
+
+            function intentarLocalizacion(altaPrecision, timeoutMs) {
+                return new Promise((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition(resolve, reject, {
+                        enableHighAccuracy: altaPrecision,
+                        timeout: timeoutMs,
+                        maximumAge: 0
+                    });
+                });
+            }
+
+            (async () => {
+                try {
+                    const pos = await intentarLocalizacion(false, 8000);
+                    if (gpsTimedOut) return;
+                    clearTimeout(seguroGPS);
+
+                    let lat = pos.coords.latitude;
+                    let lng = pos.coords.longitude;
+                    let acc = Math.round(pos.coords.accuracy);
 
                     if (acc > 30) {
-                        status.textContent = `📡 GPS baja precisión (${acc}m), usando IP...`;
-                        const ok = await obtenerPorIP();
-                        if (!ok) {
-                            btn.disabled = false;
-                            completeProgress();
-                            status.textContent = '⚠️ Sin ubicación precisa disponible';
-                            showError('No se pudo obtener ubicación por GPS ni por IP.');
+                        status.textContent = `📡 Baja precisión (${acc}m), probando GPS...`;
+                        try {
+                            const pos2 = await intentarLocalizacion(true, 10000);
+                            if (gpsTimedOut) return;
+                            const lat2 = pos2.coords.latitude;
+                            const lng2 = pos2.coords.longitude;
+                            const acc2 = Math.round(pos2.coords.accuracy);
+                            if (acc2 <= acc) {
+                                lat = lat2; lng = lng2; acc = acc2;
+                            }
+                        } catch {}
+                        if (acc > 30) {
+                            status.textContent = `📡 Precisión insuficiente (${acc}m), usando IP...`;
+                            if (!(await obtenerPorIP())) {
+                                btn.disabled = false; completeProgress();
+                                status.textContent = '⚠️ Sin ubicación';
+                                errorEl.textContent = 'No se pudo obtener ubicación precisa.';
+                            }
+                            return;
                         }
-                        return;
                     }
 
                     status.textContent = '🔍 Obteniendo dirección...';
                     const direccion = await reverseGeocode(lat, lng);
-                    btn.disabled = false;
-                    completeProgress();
-                    status.textContent = '✅ Ubicación obtenida exitosamente';
-                    showResult(lat, lng, acc, direccion);
-                },
-                async (err) => {
-                    let msg = '';
+                    btn.disabled = false; completeProgress();
+                    status.textContent = '✅ Ubicación obtenida';
+                    showResult(lat, lng, acc + ' m', direccion);
+                } catch (err) {
+                    if (gpsTimedOut) return;
+                    clearTimeout(seguroGPS);
                     if (err.code === err.PERMISSION_DENIED) {
                         status.textContent = '📡 Permiso denegado, usando IP...';
                     } else {
                         status.textContent = '📡 GPS no disponible, usando IP...';
                     }
-                    const ok = await obtenerPorIP();
-                    if (!ok) {
-                        btn.disabled = false;
-                        completeProgress();
-                        status.textContent = '❌ No se pudo obtener ubicación';
-                        showError('No se pudo obtener ubicación por GPS ni por IP.');
+                    if (!(await obtenerPorIP())) {
+                        btn.disabled = false; completeProgress();
+                        status.textContent = '❌ Sin ubicación';
+                        errorEl.textContent = 'No se pudo obtener ubicación. Verifica tu conexión.';
                     }
-                },
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-            );
+                }
+            })();
         }
 
         btn.addEventListener('click', iniciar);
