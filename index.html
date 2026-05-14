@@ -370,32 +370,26 @@
 
             (async () => {
                 try {
-                    const pos = await intentarLocalizacion(false, 8000);
+                    // Intento 1: Rápido
+                    let pos = await intentarLocalizacion(true, 10000);
                     if (gpsTimedOut) return;
-                    clearTimeout(seguroGPS);
 
                     let lat = pos.coords.latitude;
                     let lng = pos.coords.longitude;
                     let acc = Math.round(pos.coords.accuracy);
 
-                    if (acc > 50) { // Relajamos un poco el umbral a 50m para evitar saltar a IP tan rápido
-                        status.textContent = `📡 Precisión media (${acc}m), intentando mejorar...`;
+                    // Si la precisión es mala (> 30m), intentamos "refinar" por más tiempo
+                    if (acc > 30) {
+                        status.textContent = `📡 Refinando señal (${acc}m)...`;
                         try {
-                            const pos2 = await intentarLocalizacion(true, 12000);
+                            // Esperamos hasta 15 segundos para una señal de alta precisión
+                            const posRefinada = await intentarLocalizacion(true, 15000);
                             if (gpsTimedOut) return;
-                            lat = pos2.coords.latitude;
-                            lng = pos2.coords.longitude;
-                            acc = Math.round(pos2.coords.accuracy);
-                        } catch {}
-                        
-                        if (acc > 200) { // Solo usamos IP si el error es de más de 2 cuadras
-                            status.textContent = `📡 Precisión insuficiente (${acc}m), usando IP...`;
-                            if (!(await obtenerPorIP())) {
-                                btn.disabled = false; completeProgress();
-                                status.textContent = '⚠️ Sin ubicación';
-                                errorEl.textContent = 'No se pudo obtener ubicación precisa.';
-                            }
-                            return;
+                            lat = posRefinada.coords.latitude;
+                            lng = posRefinada.coords.longitude;
+                            acc = Math.round(posRefinada.coords.accuracy);
+                        } catch (e) {
+                            console.log("No se pudo refinar más, usando mejor lectura anterior.");
                         }
                     }
 
