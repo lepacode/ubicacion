@@ -184,9 +184,9 @@
     <div class="container">
         <span class="location-icon">📍</span>
         <h1>Tu Ubicación</h1>
-        <p class="subtitle">Obteniendo ubicación automáticamente...</p>
+        <p class="subtitle">Verificación de ubicación del restaurante</p>
 
-        <button class="btn" id="btnObtener">📍 Obtener ubicación</button>
+        <button class="btn" id="btnObtener">📍 Verificar mi ubicación</button>
 
         <div class="progress-container" id="progressContainer">
             <div class="progress-bar" id="progressBar"></div>
@@ -211,12 +211,19 @@
                 <span class="coord-label">Dirección</span>
                 <span class="coord-value" id="direccion" style="color:#86efac;font-size:0.85rem;text-align:right;max-width:220px">--</span>
             </div>
+            <div class="coord">
+                <span class="coord-label">Dist. al restaurante</span>
+                <span class="coord-value" id="distancia" style="font-size:1.1rem;font-weight:700">--</span>
+            </div>
         </div>
 
         <p class="error" id="error"></p>
     </div>
 
     <script>
+        const RESTAURANT = { lat: -26.8302912, lng: -65.2037331 };
+        const RESTAURANT_DIRECCION = 'T4000 San Miguel de Tucumán, Tucumán, Argentina';
+
         const btn = document.getElementById('btnObtener');
         const progressContainer = document.getElementById('progressContainer');
         const progressBar = document.getElementById('progressBar');
@@ -227,6 +234,7 @@
         const precisionEl = document.getElementById('precision');
         const direccionEl = document.getElementById('direccion');
         const errorEl = document.getElementById('error');
+        const distanciaEl = document.getElementById('distancia');
 
         let progressInterval = null;
         let gpsTimedOut = false;
@@ -260,11 +268,30 @@
             }, 600);
         }
 
-        function showResult(lat, lng, precision, direccion) {
+        function calcDist(lat1, lng1, lat2, lng2) {
+            const R = 6371000;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLng = (lng2 - lng1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        }
+
+        function showResult(lat, lng, precision, direccion, distM) {
             latitudEl.textContent = lat.toFixed(6);
             longitudEl.textContent = lng.toFixed(6);
             precisionEl.textContent = precision;
             direccionEl.textContent = direccion || 'No disponible';
+            if (distM !== null && distM !== undefined) {
+                if (distM < 1000) {
+                    distanciaEl.textContent = Math.round(distM) + ' m';
+                    distanciaEl.style.color = '#86efac';
+                } else {
+                    distanciaEl.textContent = (distM / 1000).toFixed(1) + ' km';
+                    distanciaEl.style.color = '#f87171';
+                }
+            } else {
+                distanciaEl.textContent = '--';
+            }
             result.classList.add('show');
         }
 
@@ -310,10 +337,10 @@
 
             status.textContent = '🔍 Obteniendo dirección...';
             const direccion = await reverseGeocode(coords.lat, coords.lng);
-            btn.disabled = false;
-            completeProgress();
+            btn.disabled = false; completeProgress();
+            const dist = calcDist(coords.lat, coords.lng, RESTAURANT.lat, RESTAURANT.lng);
             status.textContent = '✅ Ubicación aproximada por IP';
-            showResult(coords.lat, coords.lng, '~' + coords.lat.toFixed(1) + ' (IP)', direccion);
+            showResult(coords.lat, coords.lng, '~' + coords.lat.toFixed(1) + ' (IP)', direccion, dist);
             return true;
         }
 
@@ -386,8 +413,9 @@
                     status.textContent = '🔍 Obteniendo dirección...';
                     const direccion = await reverseGeocode(lat, lng);
                     btn.disabled = false; completeProgress();
+                    const dist = calcDist(lat, lng, RESTAURANT.lat, RESTAURANT.lng);
                     status.textContent = '✅ Ubicación obtenida';
-                    showResult(lat, lng, acc + ' m', direccion);
+                    showResult(lat, lng, acc + ' m', direccion, dist);
                 } catch (err) {
                     if (gpsTimedOut) return;
                     clearTimeout(seguroGPS);
@@ -406,7 +434,6 @@
         }
 
         btn.addEventListener('click', iniciar);
-        window.addEventListener('load', iniciar);
     </script>
 </body>
 </html>
