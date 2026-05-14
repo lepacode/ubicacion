@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Obtener Ubicación</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #0f0f1a;
+            color: #fff;
+        }
+
+        .container {
+            background: #1a1a2e;
+            padding: 3rem 2.5rem;
+            border-radius: 24px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+            text-align: center;
+            max-width: 480px;
+            width: 90%;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #e0e0ff;
+        }
+
+        .subtitle {
+            font-size: 0.9rem;
+            color: #8888aa;
+            margin-bottom: 2rem;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #6c5ce7, #a855f7);
+            border: none;
+            color: #fff;
+            padding: 1rem 2.5rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+            border-radius: 60px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 20px rgba(108, 92, 231, 0.4);
+            width: 100%;
+            letter-spacing: 0.5px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(108, 92, 231, 0.55);
+        }
+
+        .btn:active {
+            transform: scale(0.97);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .progress-container {
+            margin-top: 2rem;
+            height: 8px;
+            background: #2a2a44;
+            border-radius: 10px;
+            overflow: hidden;
+            opacity: 0;
+            transition: opacity 0.4s;
+        }
+
+        .progress-container.active {
+            opacity: 1;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #6c5ce7, #a855f7, #ec4899);
+            background-size: 200% 100%;
+            border-radius: 10px;
+            transition: width 0.3s ease;
+            animation: shimmer 1.2s linear infinite;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        .status {
+            margin-top: 1rem;
+            font-size: 0.85rem;
+            color: #aaaacc;
+            min-height: 1.5rem;
+        }
+
+        .result {
+            margin-top: 1.5rem;
+            padding: 1.2rem;
+            background: #12122a;
+            border-radius: 16px;
+            border: 1px solid #2a2a4a;
+            display: none;
+            animation: fadeSlide 0.5s ease;
+        }
+
+        .result.show {
+            display: block;
+        }
+
+        @keyframes fadeSlide {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .coord {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.6rem 0;
+            border-bottom: 1px solid #222244;
+            font-size: 0.95rem;
+        }
+
+        .coord:last-child {
+            border-bottom: none;
+        }
+
+        .coord-label {
+            color: #8888aa;
+        }
+
+        .coord-value {
+            color: #c4b5fd;
+            font-weight: 500;
+            font-family: 'Courier New', monospace;
+        }
+
+        .coord-value.lat {
+            color: #67e8f9;
+        }
+
+        .coord-value.lng {
+            color: #f472b6;
+        }
+
+        .error {
+            margin-top: 1rem;
+            color: #f87171;
+            font-size: 0.9rem;
+            min-height: 1.5rem;
+        }
+
+        .location-icon {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <span class="location-icon">📍</span>
+        <h1>Tu Ubicación</h1>
+        <p class="subtitle">Obteniendo ubicación automáticamente...</p>
+
+        <button class="btn" id="btnObtener">📍 Obtener ubicación</button>
+
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+
+        <p class="status" id="status">Haz clic en el botón para comenzar</p>
+
+        <div class="result" id="result">
+            <div class="coord">
+                <span class="coord-label">Latitud</span>
+                <span class="coord-value lat" id="latitud">--</span>
+            </div>
+            <div class="coord">
+                <span class="coord-label">Longitud</span>
+                <span class="coord-value lng" id="longitud">--</span>
+            </div>
+            <div class="coord">
+                <span class="coord-label">Precisión</span>
+                <span class="coord-value" id="precision">--</span>
+            </div>
+            <div class="coord">
+                <span class="coord-label">Dirección</span>
+                <span class="coord-value" id="direccion" style="color:#86efac;font-size:0.85rem;text-align:right;max-width:220px">--</span>
+            </div>
+        </div>
+
+        <p class="error" id="error"></p>
+    </div>
+
+    <script>
+        const btn = document.getElementById('btnObtener');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const status = document.getElementById('status');
+        const result = document.getElementById('result');
+        const latitudEl = document.getElementById('latitud');
+        const longitudEl = document.getElementById('longitud');
+        const precisionEl = document.getElementById('precision');
+        const direccionEl = document.getElementById('direccion');
+        const errorEl = document.getElementById('error');
+
+        let progressInterval = null;
+        let progress = 0;
+
+        function resetUI() {
+            clearInterval(progressInterval);
+            progress = 0;
+            progressBar.style.width = '0%';
+            progressContainer.classList.remove('active');
+            result.classList.remove('show');
+            errorEl.textContent = '';
+        }
+
+        function simulateProgress() {
+            progressContainer.classList.add('active');
+            progress = 0;
+            progressBar.style.width = '0%';
+
+            clearInterval(progressInterval);
+            progressInterval = setInterval(() => {
+                progress += Math.random() * 6 + 2;
+                if (progress >= 95) {
+                    progress = 95;
+                    clearInterval(progressInterval);
+                }
+                progressBar.style.width = Math.min(progress, 95) + '%';
+            }, 200);
+        }
+
+        function completeProgress() {
+            clearInterval(progressInterval);
+            progress = 100;
+            progressBar.style.width = '100%';
+            setTimeout(() => {
+                progressContainer.classList.remove('active');
+                progressBar.style.width = '0%';
+            }, 600);
+        }
+
+        function showResult(lat, lng, precision, direccion) {
+            latitudEl.textContent = lat.toFixed(6);
+            longitudEl.textContent = lng.toFixed(6);
+            precisionEl.textContent = precision + ' metros';
+            direccionEl.textContent = direccion || 'No disponible';
+            result.classList.add('show');
+        }
+
+        async function reverseGeocode(lat, lng) {
+            try {
+                const res = await fetch(
+                    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
+                    { headers: { 'Accept-Language': 'es' } }
+                );
+                const data = await res.json();
+                if (data && data.display_name) {
+                    return data.display_name;
+                }
+                return null;
+            } catch {
+                return null;
+            }
+        }
+
+        function showError(msg) {
+            errorEl.textContent = msg;
+        }
+
+        async function obtenerPorIP() {
+            status.textContent = '📍 Obteniendo ubicación por IP...';
+            try {
+                const res = await fetch('https://ip-api.com/json/?fields=lat,lon,city,region,country,query');
+                const data = await res.json();
+                if (data && data.lat && data.lon) {
+                    const lat = data.lat;
+                    const lng = data.lon;
+                    status.textContent = '🔍 Obteniendo dirección...';
+                    const direccion = await reverseGeocode(lat, lng);
+                    btn.disabled = false;
+                    completeProgress();
+                    status.textContent = '✅ Ubicación aproximada por IP';
+                    showResult(lat, lng, '~' + Math.round(distanciaKm(lat, lng, lat, lng) * 1000) || 'desconocida', direccion);
+                    return true;
+                }
+                return false;
+            } catch {
+                return false;
+            }
+        }
+
+        function distanciaKm(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        }
+
+        async function iniciar() {
+            resetUI();
+            if (!navigator.geolocation) {
+                status.textContent = '📡 GPS no disponible, usando IP...';
+                await obtenerPorIP();
+                return;
+            }
+
+            status.textContent = 'Obteniendo ubicación GPS...';
+            btn.disabled = true;
+            simulateProgress();
+
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    const acc = Math.round(position.coords.accuracy);
+
+                    if (acc > 30) {
+                        status.textContent = `📡 GPS baja precisión (${acc}m), usando IP...`;
+                        const ok = await obtenerPorIP();
+                        if (!ok) {
+                            btn.disabled = false;
+                            completeProgress();
+                            status.textContent = '⚠️ Sin ubicación precisa disponible';
+                            showError('No se pudo obtener ubicación por GPS ni por IP.');
+                        }
+                        return;
+                    }
+
+                    status.textContent = '🔍 Obteniendo dirección...';
+                    const direccion = await reverseGeocode(lat, lng);
+                    btn.disabled = false;
+                    completeProgress();
+                    status.textContent = '✅ Ubicación obtenida exitosamente';
+                    showResult(lat, lng, acc, direccion);
+                },
+                async (err) => {
+                    let msg = '';
+                    if (err.code === err.PERMISSION_DENIED) {
+                        status.textContent = '📡 Permiso denegado, usando IP...';
+                    } else {
+                        status.textContent = '📡 GPS no disponible, usando IP...';
+                    }
+                    const ok = await obtenerPorIP();
+                    if (!ok) {
+                        btn.disabled = false;
+                        completeProgress();
+                        status.textContent = '❌ No se pudo obtener ubicación';
+                        showError('No se pudo obtener ubicación por GPS ni por IP.');
+                    }
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+            );
+        }
+
+        btn.addEventListener('click', iniciar);
+        window.addEventListener('load', iniciar);
+    </script>
+</body>
+</html>
